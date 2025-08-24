@@ -77,3 +77,173 @@ struct numbfs_inode *numbfs_idisk(struct numbfs_buf *buf,
                         (nid % NUMBFS_NODES_PER_BLOCK);
         return ret;
 }
+
+/**
+ * numbfs_iaddrspace_blkaddr - Get or allocate a block address for a given file position
+ * @ni: Pointer to the numbfs inode info structure
+ * @pos: File position (byte offset) to map to a block
+ * @alloc: If true, allocate a new block if the position is a hole
+ *
+ * Return:
+ *   On success, returns the physical block number (>= 0).
+ *   If @pos is out of range, returns -E2BIG.
+ *   If block allocation fails (when @alloc is true), returns the error code
+ *   from numbfs_balloc().
+ */
+int numbfs_iaddrspace_blkaddr(struct numbfs_inode_info *ni,
+                              unsigned long pos, bool alloc)
+{
+        int blk, err;
+
+        if ((pos / NUMBFS_BYTES_PER_BLOCK) >= NUMBFS_NUM_DATA_ENTRY) {
+                pr_err("numbfs: pos@%ld is out of range\n", pos);
+                return -E2BIG;
+        }
+
+        blk = ni->data[pos / NUMBFS_BYTES_PER_BLOCK];
+        if (alloc && blk == NUMBFS_HOLE) {
+                err = numbfs_balloc(ni->vfs_inode.i_sb, &blk);
+                if (err)
+                        return err;
+                ni->data[pos / NUMBFS_BYTES_PER_BLOCK] = blk;
+        }
+        return blk;
+}
+
+static int numbfs_bitmap_alloc(struct super_block *sb, int startblk,
+                               int total, int *res, int *quota)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int err, i, byte, bit;
+        struct numbfs_buf buf;
+        unsigned char *bitmap;
+
+        err = -ENOMEM;
+        *res = -1;
+        mutex_lock(&sbi->s_mutex);
+        /* run out of quota */
+        if (!*quota)
+                goto out;
+        for (i = 0; i < total; i++) {
+                if (i % NUMBFS_BLOCKS_PER_BLOCK == 0) {
+                        if (i > 0) {
+                                numbfs_commit_buf(&buf);
+                                numbfs_put_buf(&buf);
+                        }
+                        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, numbfs_bmap_blk(startblk, i));
+                        err = numbfs_read_buf(&buf);
+                        if (err) {
+                                pr_err("numbfs: failed to read bitmap block@%d\n", buf.blkaddr);
+                                goto out;
+                        }
+                        bitmap = (unsigned char*)buf.base +
+                                ((buf.blkaddr << NUMBFS_BLOCK_BITS) & (PAGE_SIZE - 1));
+                }
+
+
+                byte = numbfs_bmap_byte(i);
+                bit = numbfs_bmap_bit(i);
+                if (!(bitmap[byte] & (1 << bit))) {
+                        err = 0;
+                        *res = i;
+                        /* mark this folio dirty */
+                        folio_lock(buf.folio);
+                        bitmap[byte] |= (1 << bit);
+                        filemap_dirty_folio(folio_inode(buf.folio)->i_mapping,
+                                            buf.folio);
+                        folio_unlock(buf.folio);
+                        break;
+                }
+
+        }
+        if (!err)
+                *quota -= 1;;
+out:
+        mutex_unlock(&sbi->s_mutex);
+        numbfs_put_buf(&buf);
+        return err;
+}
+
+static int numbfs_bitmap_free(struct super_block *sb, int startblk, int free,
+                              int *quota)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int err, byte, bit;
+        struct numbfs_buf buf;
+        unsigned char *bitmap;
+
+        mutex_lock(&sbi->s_mutex);
+        numbfs_init_buf(&buf, sb->s_bdev->bd_inode,
+                        numbfs_bmap_blk(startblk, free));
+        err = numbfs_read_buf(&buf);
+        if (err)
+                goto out;
+
+        bitmap = (unsigned char*)buf.base +
+                ((buf.blkaddr << NUMBFS_BLOCK_BITS) & (PAGE_SIZE - 1));
+        byte = numbfs_bmap_byte(free);
+        bit = numbfs_bmap_bit(free);
+        WARN_ON(!(bitmap[byte] & (1 << bit)));
+        /* mark this folio dirty */
+        folio_lock(buf.folio);
+        bitmap[byte] &= ~(1 << bit);
+        filemap_dirty_folio(folio_inode(buf.folio)->i_mapping,
+                            buf.folio);
+        folio_unlock(buf.folio);
+        *quota += 1;
+        err = 0;
+out:
+        mutex_unlock(&sbi->s_mutex);
+        numbfs_put_buf(&buf);
+        return err;
+}
+
+int numbfs_balloc(struct super_block *sb, int *blk)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int res, err;
+
+        err = numbfs_bitmap_alloc(sb, sbi->bbitmap_start, sbi->data_blocks,
+                                  &res, &sbi->free_blocks);
+        if (err)
+                return err;
+
+        *blk = res;
+        return 0;
+}
+
+int numbfs_bfree(struct super_block *sb, int blk)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+
+        if (blk >= sbi->data_blocks)
+                return -EINVAL;
+
+        return numbfs_bitmap_free(sb, sbi->bbitmap_start, blk,
+                                  &sbi->free_blocks);
+}
+
+int numbfs_ialloc(struct super_block *sb, int *nid)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int res, err;
+
+        err = numbfs_bitmap_alloc(sb, sbi->ibitmap_start, sbi->total_inodes,
+                                &res, &sbi->free_inodes);
+        if (err)
+                return err;
+
+        *nid = res;
+        return 0;
+}
+
+int numbfs_ifree(struct super_block *sb, int nid)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+
+        if (nid >= sbi->total_inodes)
+                return -EINVAL;
+
+        return numbfs_bitmap_free(sb, sbi->ibitmap_start, nid,
+                                  &sbi->free_inodes);
+}

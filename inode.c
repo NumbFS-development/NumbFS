@@ -63,7 +63,7 @@ static int numbfs_fill_inode(struct inode *inode)
                 err = -EOPNOTSUPP;
                 break;
         case S_IFDIR:
-                // TODO: XXX
+                numbfs_dir_set_ops(inode);
                 err = 0;
                 break;
         default:

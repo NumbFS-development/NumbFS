@@ -39,9 +39,49 @@ static void numbfs_free_inode(struct inode *inode)
         kmem_cache_free(numbfs_inode_cachep, ni);
 }
 
+static void numbfs_put_super(struct super_block *sb)
+{
+        struct numbfs_buf buf;
+        struct numbfs_super_block *nsb;
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
+        int err = 0;
+
+        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        err = numbfs_read_buf(&buf);
+        if (err) {
+                pr_err("numbfs: failed to read superblock\n");
+                goto exit;
+        }
+
+        err = -EINVAL;
+        nsb = (struct numbfs_super_block*)(buf.base + offset);
+        if (le32_to_cpu(nsb->s_magic) != NUMBFS_MAGIC) {
+                pr_err("numbfs: can not find a valid superblock\n");
+                goto exit;
+        }
+
+        nsb->s_feature          = cpu_to_le32(sbi->feature);
+        nsb->s_total_inodes     = cpu_to_le32(sbi->total_inodes);
+        nsb->s_free_inodes      = cpu_to_le32(sbi->free_inodes);
+        nsb->s_data_blocks      = cpu_to_le32(sbi->data_blocks);
+        nsb->s_free_blocks      = cpu_to_le32(sbi->free_blocks);
+        nsb->s_ibitmap_start    = cpu_to_le32(sbi->ibitmap_start);
+        nsb->s_inode_start      = cpu_to_le32(sbi->inode_start);
+        nsb->s_bbitmap_start    = cpu_to_le32(sbi->bbitmap_start);
+        nsb->s_data_start       = cpu_to_le32(sbi->data_start);
+
+        err = numbfs_commit_buf(&buf);
+        if (err)
+                pr_err("numbfs: failded to write superblock to disk.\n");
+exit:
+        numbfs_put_buf(&buf);
+}
+
 const struct super_operations numbfs_sops = {
         .alloc_inode    = numbfs_alloc_inode,
         .free_inode     = numbfs_free_inode,
+        .put_super      = numbfs_put_super,
 };
 
 static int numbfs_read_superblock(struct super_block *sb)

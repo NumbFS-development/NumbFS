@@ -449,6 +449,39 @@ static int numbfs_dir_rename(struct mnt_idmap *idmap,
         return 0;
 }
 
+static int numbfs_dir_link(struct dentry *old_dentry, struct inode *dir,
+	                   struct dentry *dentry)
+{
+        struct inode *inode = d_inode(old_dentry);
+        const char *name = dentry->d_name.name;
+        int namelen = dentry->d_name.len;
+        int err, nid, off;
+
+        if (S_ISDIR(inode->i_mode))
+                return -EPERM;
+
+        if (dir->i_sb != inode->i_sb)
+                return -EXDEV;
+
+        err = numbfs_inode_by_name(dir, name, namelen, &nid, &off);
+        if (err != -ENOENT)
+                return -EEXIST;
+
+        inode_inc_link_count(inode);
+        ihold(inode);
+
+        err = numbfs_write_dir(dir, inode->i_mode & S_IFMT, name,
+                               namelen, inode->i_ino, 0);
+        if (!err) {
+		d_instantiate(dentry, inode);
+		return 0;
+        }
+
+	inode_dec_link_count(inode);
+	iput(inode);
+	return err;
+}
+
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
@@ -456,6 +489,7 @@ const struct inode_operations numbfs_dir_iops = {
         .unlink         = numbfs_dir_unlink,
         .rmdir          = numbfs_dir_rmdir,
         .rename         = numbfs_dir_rename,
+        .link           = numbfs_dir_link,
 };
 
 const struct file_operations numbfs_dir_fops = {

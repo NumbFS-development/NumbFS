@@ -120,10 +120,21 @@ static int numbfs_write_inode(struct inode *inode, struct writeback_control *wbc
         return numbfs_write_inode_meta(inode);
 }
 
+/**
+ * Is this inode should be droped?
+ *
+ * This will be called before evict inode in iput().
+ */
+static int numbfs_drop_inode(struct inode *inode)
+{
+        return generic_drop_inode(inode);
+}
+
 const struct super_operations numbfs_sops = {
         .alloc_inode    = numbfs_alloc_inode,
         .free_inode     = numbfs_free_inode,
         .write_inode    = numbfs_write_inode,
+        .drop_inode     = numbfs_drop_inode,
         .put_super      = numbfs_put_super,
 };
 

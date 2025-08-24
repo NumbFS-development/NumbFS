@@ -482,6 +482,50 @@ static int numbfs_dir_link(struct dentry *old_dentry, struct inode *dir,
 	return err;
 }
 
+static int numbfs_dir_symlink(struct mnt_idmap *idmap, struct inode *dir,
+	                      struct dentry * dentry, const char * symname)
+{
+        struct inode *inode;
+        struct folio *folio;
+        int err, nid, off;
+        void *kaddr;
+
+        if (strlen(symname) > NUMBFS_BYTES_PER_BLOCK)
+                return -ENAMETOOLONG;
+
+        err = numbfs_inode_by_name(dir, dentry->d_name.name,
+                                   dentry->d_name.len, &nid, &off);
+        if (err != -ENOENT)
+                return -EEXIST;
+
+        /* alloc inode */
+        inode = numbfs_dir_ialloc(dir, S_IFLNK | 0444);
+        if (IS_ERR(inode))
+                return PTR_ERR(inode);
+
+        /* copy symname */
+        folio = read_cache_folio(inode->i_mapping, 0, NULL, NULL);
+        if (IS_ERR(folio))
+                return PTR_ERR(folio);
+
+        folio_lock(folio);
+        kaddr = kmap_local_folio(folio, 0);
+        memcpy(kaddr, symname, strlen(symname));
+        iomap_dirty_folio(inode->i_mapping, folio);
+        folio_unlock(folio);
+
+        folio_release_kmap(folio, kaddr);
+        numbfs_setsize(inode, strlen(symname));
+        mark_inode_dirty(inode);
+
+        /* instantiate inode and dentry */
+        d_instantiate_new(dentry, inode);
+
+        /* append dirent */
+        return numbfs_write_dir(dir, S_IFLNK, dentry->d_name.name,
+                                dentry->d_name.len, inode->i_ino, 0);
+}
+
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
@@ -490,6 +534,7 @@ const struct inode_operations numbfs_dir_iops = {
         .rmdir          = numbfs_dir_rmdir,
         .rename         = numbfs_dir_rename,
         .link           = numbfs_dir_link,
+        .symlink        = numbfs_dir_symlink,
 };
 
 const struct file_operations numbfs_dir_fops = {

@@ -10,7 +10,38 @@
 #include <linux/fs_context.h>
 #include <linux/pagemap.h>
 
+static struct kmem_cache *numbfs_inode_cachep __read_mostly;
+
+static void numbfs_inode_init_once(void *ptr)
+{
+        struct numbfs_inode_info *ni = ptr;
+
+        inode_init_once(&ni->vfs_inode);
+}
+
+static struct inode *numbfs_alloc_inode(struct super_block *sb)
+{
+        struct numbfs_inode_info *ni =
+                        alloc_inode_sb(sb, numbfs_inode_cachep, GFP_KERNEL);
+
+        if (!ni)
+                return NULL;
+
+        /* set everything except vfs_inode to zero */
+        memset(ni, 0, offsetof(struct numbfs_inode_info, vfs_inode));
+        return &ni->vfs_inode;
+}
+
+static void numbfs_free_inode(struct inode *inode)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+
+        kmem_cache_free(numbfs_inode_cachep, ni);
+}
+
 const struct super_operations numbfs_sops = {
+        .alloc_inode    = numbfs_alloc_inode,
+        .free_inode     = numbfs_free_inode,
 };
 
 static int numbfs_read_superblock(struct super_block *sb)
@@ -154,11 +185,19 @@ MODULE_ALIAS_FS("numbfs");
 
 static int __init numbfs_module_init(void)
 {
+        numbfs_inode_cachep = kmem_cache_create("numbfs_inodes",
+                        sizeof(struct numbfs_inode_info), 0,
+			SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD | SLAB_ACCOUNT,
+			numbfs_inode_init_once);
+        if (!numbfs_inode_cachep)
+                return -ENOMEM;
+
         return register_filesystem(&numbfs_fs_type);
 }
 
 static void __exit numbfs_module_exit(void)
 {
+        kmem_cache_destroy(numbfs_inode_cachep);
 	unregister_filesystem(&numbfs_fs_type);
 }
 

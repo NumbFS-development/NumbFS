@@ -56,3 +56,24 @@ void numbfs_put_buf(struct numbfs_buf *buf)
         folio_put(buf->folio);
         buf->folio = NULL;
 }
+
+/* @addr is the address of a page, caller should put the buf */
+struct numbfs_inode *numbfs_idisk(struct numbfs_buf *buf,
+                                  struct super_block *sb, int nid)
+{
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        struct numbfs_inode *ret;
+        int blkaddr, offset, err;
+
+        numbfs_init_buf(buf, sb->s_bdev->bd_inode, numbfs_inode_blk(sbi, nid));
+        err = numbfs_read_buf(buf);
+        if (err)
+                return ERR_PTR(err);
+
+
+        blkaddr = numbfs_inode_blk(sbi, nid);
+        offset = (blkaddr << NUMBFS_BLOCK_BITS) & (PAGE_SIZE - 1);
+        ret = ((struct numbfs_inode*)((unsigned char*)buf->base + offset)) +
+                        (nid % NUMBFS_NODES_PER_BLOCK);
+        return ret;
+}

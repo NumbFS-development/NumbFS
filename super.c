@@ -130,11 +130,24 @@ static int numbfs_drop_inode(struct inode *inode)
         return generic_drop_inode(inode);
 }
 
+static void numbfs_evict_inode(struct inode *inode)
+{
+	truncate_inode_pages_final(&inode->i_data);
+
+        if (!inode->i_nlink) {
+                (void)numbfs_ifree(inode->i_sb, inode->i_ino);
+                numbfs_setsize(inode, 0);
+        }
+
+        clear_inode(inode);
+}
+
 const struct super_operations numbfs_sops = {
         .alloc_inode    = numbfs_alloc_inode,
         .free_inode     = numbfs_free_inode,
         .write_inode    = numbfs_write_inode,
         .drop_inode     = numbfs_drop_inode,
+        .evict_inode    = numbfs_evict_inode,
         .put_super      = numbfs_put_super,
 };
 

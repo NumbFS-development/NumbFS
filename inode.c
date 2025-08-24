@@ -7,6 +7,24 @@
 #include <uapi/asm-generic/errno-base.h>
 #include <linux/namei.h>
 
+static void numbfs_truncate_blocks(struct inode *inode, loff_t newsize)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+        loff_t i = DIV_ROUND_UP(newsize, NUMBFS_BYTES_PER_BLOCK);
+
+        for (; i < NUMBFS_NUM_DATA_ENTRY; i++)
+                if (ni->data[i] != NUMBFS_HOLE)
+                        numbfs_bfree(inode->i_sb, ni->data[i]);
+}
+
+void numbfs_setsize(struct inode *inode, loff_t newsize)
+{
+	filemap_invalidate_lock(inode->i_mapping);
+	truncate_setsize(inode, newsize);
+	numbfs_truncate_blocks(inode, newsize);
+	filemap_invalidate_unlock(inode->i_mapping);
+}
+
 static int numbfs_fill_inode(struct inode *inode)
 {
         struct super_block *sb = inode->i_sb;

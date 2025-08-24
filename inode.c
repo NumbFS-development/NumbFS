@@ -9,8 +9,15 @@
 
 void numbfs_file_set_ops(struct inode *inode)
 {
-        // TODO: XXX
-        return;
+	if (S_ISLNK(inode->i_mode)) {
+		inode->i_op = &numbfs_symlink_iops;
+		inode->i_fop = &numbfs_file_fops;
+		inode->i_mapping->a_ops = &numbfs_aops;
+	} else {
+		inode->i_op = &numbfs_generic_iops;
+		inode->i_fop = &numbfs_file_fops;
+		inode->i_mapping->a_ops = &numbfs_aops;
+	}
 }
 
 static void numbfs_truncate_blocks(struct inode *inode, loff_t newsize)
@@ -117,3 +124,40 @@ struct inode *numbfs_iget(struct super_block *sb, int nid)
         }
         return inode;
 }
+
+const struct inode_operations numbfs_generic_iops = {
+};
+
+static void numbfs_link_free(void *target)
+{
+        kfree(target);
+}
+
+static const char *numbfs_get_link(struct dentry *dentry, struct inode *inode,
+			           struct delayed_call *callback)
+{
+        struct numbfs_buf buf;
+        char *target;
+        int err;
+
+        target = kmalloc(NUMBFS_BYTES_PER_BLOCK, GFP_KERNEL);
+        if (!target)
+                return ERR_PTR(-ENOMEM);
+
+        numbfs_init_buf(&buf, inode, 0);
+        err = numbfs_read_buf(&buf);
+        if (err) {
+                numbfs_put_buf(&buf);
+                return ERR_PTR(err);
+        }
+
+        memcpy(target, buf.base, NUMBFS_BYTES_PER_BLOCK);
+        numbfs_put_buf(&buf);
+        nd_terminate_link(target, inode->i_size, NUMBFS_BYTES_PER_BLOCK-1);
+        set_delayed_call(callback, numbfs_link_free, target);
+        return target;
+}
+
+const struct inode_operations numbfs_symlink_iops = {
+        .get_link       = numbfs_get_link
+};

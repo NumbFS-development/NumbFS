@@ -10,13 +10,118 @@
 #include <linux/fs_context.h>
 #include <linux/pagemap.h>
 
+static struct kmem_cache *numbfs_inode_cachep __read_mostly;
+
+static void numbfs_inode_init_once(void *ptr)
+{
+        struct numbfs_inode_info *ni = ptr;
+
+        inode_init_once(&ni->vfs_inode);
+}
+
+static struct inode *numbfs_alloc_inode(struct super_block *sb)
+{
+        struct numbfs_inode_info *ni =
+                        alloc_inode_sb(sb, numbfs_inode_cachep, GFP_KERNEL);
+
+        if (!ni)
+                return NULL;
+
+        /* set everything except vfs_inode to zero */
+        memset(ni, 0, offsetof(struct numbfs_inode_info, vfs_inode));
+        return &ni->vfs_inode;
+}
+
+static void numbfs_free_inode(struct inode *inode)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+
+        kmem_cache_free(numbfs_inode_cachep, ni);
+}
+
+static void numbfs_put_super(struct super_block *sb)
+{
+        struct numbfs_buf buf;
+        struct numbfs_super_block *nsb;
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
+        int err = 0;
+
+        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        err = numbfs_read_buf(&buf);
+        if (err) {
+                pr_err("numbfs: failed to read superblock\n");
+                goto exit;
+        }
+
+        err = -EINVAL;
+        nsb = (struct numbfs_super_block*)(buf.base + offset);
+        if (le32_to_cpu(nsb->s_magic) != NUMBFS_MAGIC) {
+                pr_err("numbfs: can not find a valid superblock\n");
+                goto exit;
+        }
+
+        nsb->s_feature          = cpu_to_le32(sbi->feature);
+        nsb->s_total_inodes     = cpu_to_le32(sbi->total_inodes);
+        nsb->s_free_inodes      = cpu_to_le32(sbi->free_inodes);
+        nsb->s_data_blocks      = cpu_to_le32(sbi->data_blocks);
+        nsb->s_free_blocks      = cpu_to_le32(sbi->free_blocks);
+        nsb->s_ibitmap_start    = cpu_to_le32(sbi->ibitmap_start);
+        nsb->s_inode_start      = cpu_to_le32(sbi->inode_start);
+        nsb->s_bbitmap_start    = cpu_to_le32(sbi->bbitmap_start);
+        nsb->s_data_start       = cpu_to_le32(sbi->data_start);
+
+        err = numbfs_commit_buf(&buf);
+        if (err)
+                pr_err("numbfs: failded to write superblock to disk.\n");
+exit:
+        numbfs_put_buf(&buf);
+}
+
 const struct super_operations numbfs_sops = {
+        .alloc_inode    = numbfs_alloc_inode,
+        .free_inode     = numbfs_free_inode,
+        .put_super      = numbfs_put_super,
 };
 
 static int numbfs_read_superblock(struct super_block *sb)
 {
-        // TODO: xxx
-        return 0;
+        struct numbfs_buf buf;
+        struct numbfs_super_block *nsb;
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
+        int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
+        int err = 0;
+
+        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+
+        err = numbfs_read_buf(&buf);
+        if (err) {
+                pr_err("numbfs: failed to read superblock\n");
+                goto exit;
+        }
+
+        err = -EINVAL;
+        nsb = (struct numbfs_super_block*)(buf.base + offset);
+        if (le32_to_cpu(nsb->s_magic) != NUMBFS_MAGIC) {
+                pr_err("numbfs: can not find a valid superblock\n");
+                goto exit;
+        }
+
+        sbi->feature = le32_to_cpu(nsb->s_feature);
+        sbi->total_inodes = le32_to_cpu(nsb->s_total_inodes);
+        sbi->free_inodes = le32_to_cpu(nsb->s_free_inodes);
+        sbi->data_blocks = le32_to_cpu(nsb->s_data_blocks);
+        sbi->free_blocks = le32_to_cpu(nsb->s_free_blocks);
+        sbi->ibitmap_start = le32_to_cpu(nsb->s_ibitmap_start);
+        sbi->inode_start = le32_to_cpu(nsb->s_inode_start);
+        sbi->bbitmap_start = le32_to_cpu(nsb->s_bbitmap_start);
+        sbi->data_start = le32_to_cpu(nsb->s_data_start);
+        sbi->block_bits = NUMBFS_BLOCK_BITS;
+
+        err = 0;
+exit:
+        numbfs_put_buf(&buf);
+        return err;
 }
 
 static int numbfs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
@@ -120,11 +225,19 @@ MODULE_ALIAS_FS("numbfs");
 
 static int __init numbfs_module_init(void)
 {
+        numbfs_inode_cachep = kmem_cache_create("numbfs_inodes",
+                        sizeof(struct numbfs_inode_info), 0,
+			SLAB_RECLAIM_ACCOUNT | SLAB_MEM_SPREAD | SLAB_ACCOUNT,
+			numbfs_inode_init_once);
+        if (!numbfs_inode_cachep)
+                return -ENOMEM;
+
         return register_filesystem(&numbfs_fs_type);
 }
 
 static void __exit numbfs_module_exit(void)
 {
+        kmem_cache_destroy(numbfs_inode_cachep);
 	unregister_filesystem(&numbfs_fs_type);
 }
 

@@ -1,0 +1,67 @@
+name: Run Tests on Merge
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  numbfs_test:
+    runs-on: ubuntu-22.04
+
+    env:
+      NUMBFS_UTILS_REPO: "https://github.com/salvete/NumbFS-utils.git"
+      IMAGE_SIZE: "10M"
+      IMAGE_NAME: "numbfs_img"
+      MOUNT_POINT: "/mnt/numbfs_test"
+      NUMBFS_ROOT: "${{ github.workspace }}"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y linux-headers-$(uname -r) build-essential git meson ninja-build
+
+      - name: Build numbfs-utils
+        run: |
+          git clone $NUMBFS_UTILS_REPO
+          cd NumbFS-utils
+          meson setup build
+          cd build
+          ninja
+          sudo ninja install
+          cd $NUMBFS_ROOT
+
+      - name: Build numbfs filesystem image
+        run: |
+          cd $NUMBFS_ROOT
+          dd if=/dev/zero of=./$IMAGE_NAME bs=$IMAGE_SIZE count=1
+          mkfs.numbfs ./$IMAGE_NAME
+          sudo mkdir -p $MOUNT_POINT
+
+      - name: Build and load kernel module
+        run: |
+          cd $NUMBFS_ROOT
+          make -C /usr/src/linux-headers-$(uname -r) M=$(pwd)
+          sudo insmod ./numbfs.ko
+          lsmod | grep numbfs || (echo "Failed to load numbfs module" && exit 1)
+
+      - name: Mount and test filesystem
+        run: |
+          cd $NUMBFS_ROOT
+          sudo mount -t numbfs -o loop ./$IMAGE_NAME $MOUNT_POINT
+          mount | grep numbfs || (echo "Failed to mount numbfs" && exit 1)
+
+          echo "NumbFS mounted successfully at $MOUNT_POINT"
+
+      - name: Cleanup
+        run: |
+          cd $NUMBFS_ROOT
+          sudo umount $MOUNT_POINT 2>/dev/null || true
+          sudo rmmod numbfs 2>/dev/null || true
+          sudo rm -rf $MOUNT_POINT
+          make clean 2>/dev/null || true

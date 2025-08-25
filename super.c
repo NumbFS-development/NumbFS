@@ -78,9 +78,76 @@ exit:
         numbfs_put_buf(&buf);
 }
 
+static void numbfs_dump_inode(struct inode *inode, struct numbfs_inode *di)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+        int i;
+
+        di->i_ino = cpu_to_le16(inode->i_ino);
+        di->i_mode = cpu_to_le32(inode->i_mode);
+        di->i_nlink = cpu_to_le16(inode->i_nlink);
+        di->i_uid = cpu_to_le16(__kuid_val(inode->i_uid));
+        di->i_gid = cpu_to_le16(__kgid_val(inode->i_gid));
+        di->i_size = cpu_to_le32(inode->i_size);
+        for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
+                di->i_data[i] = cpu_to_le32(ni->data[i]);
+}
+
+static int numbfs_write_inode_meta(struct inode *inode)
+{
+        struct numbfs_buf buf;
+        struct numbfs_inode *di;
+        int nid = inode->i_ino;
+        int err;
+
+        di = numbfs_idisk(&buf, inode->i_sb, nid);
+        if (IS_ERR(di)) {
+                err = PTR_ERR(di);
+                goto out;
+        }
+
+        folio_lock(buf.folio);
+        numbfs_dump_inode(inode, di);
+        err = numbfs_commit_buf(&buf);
+        folio_unlock(buf.folio);
+out:
+        numbfs_put_buf(&buf);
+        return err;
+}
+
+static int numbfs_write_inode(struct inode *inode, struct writeback_control *wbc)
+{
+        return numbfs_write_inode_meta(inode);
+}
+
+/**
+ * Is this inode should be droped?
+ *
+ * This will be called before evict inode in iput().
+ */
+static int numbfs_drop_inode(struct inode *inode)
+{
+        return generic_drop_inode(inode);
+}
+
+static void numbfs_evict_inode(struct inode *inode)
+{
+	truncate_inode_pages_final(&inode->i_data);
+
+        if (!inode->i_nlink) {
+                (void)numbfs_ifree(inode->i_sb, inode->i_ino);
+                numbfs_setsize(inode, 0);
+        }
+
+        clear_inode(inode);
+}
+
 const struct super_operations numbfs_sops = {
         .alloc_inode    = numbfs_alloc_inode,
         .free_inode     = numbfs_free_inode,
+        .write_inode    = numbfs_write_inode,
+        .drop_inode     = numbfs_drop_inode,
+        .evict_inode    = numbfs_evict_inode,
         .put_super      = numbfs_put_super,
 };
 

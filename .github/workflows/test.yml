@@ -58,6 +58,16 @@ jobs:
 
           echo "NumbFS mounted successfully at $MOUNT_POINT"
 
+          if [ -d "tests" ]; then
+            chmod +x tests/*.sh 2>/dev/null || true
+          fi
+
+          # lookup test
+          if [ -f "tests/lookup.sh" ]; then
+            echo "Running dir lookup tests..."
+            ./tests/lookup.sh $MOUNT_POINT
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

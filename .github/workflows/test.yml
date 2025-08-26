@@ -86,6 +86,12 @@ jobs:
             ./tests/unlink.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # rmdir test
+          if [ -f "tests/rmdir.sh" ]; then
+            echo "Running rmdir tests..."
+            ./tests/rmdir.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

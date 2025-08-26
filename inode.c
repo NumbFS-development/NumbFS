@@ -7,6 +7,12 @@
 #include <uapi/asm-generic/errno-base.h>
 #include <linux/namei.h>
 
+void numbfs_file_set_ops(struct inode *inode)
+{
+        // TODO: XXX
+        return;
+}
+
 static void numbfs_truncate_blocks(struct inode *inode, loff_t newsize)
 {
         struct numbfs_inode_info *ni = NUMBFS_I(inode);
@@ -57,10 +63,9 @@ static int numbfs_fill_inode(struct inode *inode)
         err = 0;
         switch(inode->i_mode & S_IFMT) {
         case S_IFREG:
-                err = -EOPNOTSUPP;
-                break;
         case S_IFLNK:
-                err = -EOPNOTSUPP;
+                numbfs_file_set_ops(inode);
+                err = 0;
                 break;
         case S_IFDIR:
                 numbfs_dir_set_ops(inode);

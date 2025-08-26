@@ -55,6 +55,26 @@ static int numbfs_read_folio(struct file *file, struct folio *folio)
         return iomap_read_folio(folio, &numbfs_iomap_read_ops);
 }
 
+static int numbfs_map_blocks(struct iomap_writepage_ctx *wpc,
+                             struct inode *inode, loff_t offset)
+{
+        return numbfs_iomap(inode, offset, NUMBFS_BYTES_PER_BLOCK,
+                            &wpc->iomap, NUMBFS_WRITE);
+}
+
+static const struct iomap_writeback_ops numbfs_writeback_ops = {
+        .map_blocks = numbfs_map_blocks,
+};
+
+static int numbfs_writepages(struct address_space *mapping,
+                             struct writeback_control *wbc)
+{
+	struct iomap_writepage_ctx ctx = {};
+
+	return iomap_writepages(mapping, wbc, &ctx, &numbfs_writeback_ops);
+}
+
 const struct address_space_operations numbfs_aops = {
         .read_folio             = numbfs_read_folio,
+        .writepages             = numbfs_writepages,
 };

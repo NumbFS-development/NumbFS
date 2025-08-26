@@ -68,6 +68,12 @@ jobs:
             ./tests/lookup.sh $MOUNT_POINT
           fi
 
+          # create test
+          if [ -f "tests/create.sh" ]; then
+            echo "Running file create tests..."
+            ./tests/create.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

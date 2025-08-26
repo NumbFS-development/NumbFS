@@ -7,6 +7,11 @@
 #include <linux/pagemap.h>
 #include <linux/iomap.h>
 
+#define DOT             "."
+#define DOTDOT          ".."
+#define DOTLEN          strlen(DOT)
+#define DOTDOTLEN       strlen(DOTDOT)
+
 void numbfs_dir_set_ops(struct inode *inode)
 {
         inode->i_op = &numbfs_dir_iops;
@@ -239,10 +244,49 @@ static int numbfs_dir_create(struct mnt_idmap *idmap, struct inode *dir,
         return numbfs_write_dir(dir, mode, name, namelen, inode->i_ino, 0);
 }
 
+static int numbfs_make_empty(struct inode *dir, struct inode *pdir,
+                             umode_t mode, int nid)
+{
+        int err;
+
+        err = numbfs_write_dir(dir, mode, DOT, DOTLEN, nid, 0);
+        if (err)
+                return err;
+
+        return numbfs_write_dir(dir, pdir->i_mode, DOTDOT, DOTDOTLEN,
+                                pdir->i_ino, 0);
+}
+
+static int numbfs_dir_mkdir(struct mnt_idmap *idmap, struct inode *dir,
+                            struct dentry *dentry, umode_t mode)
+{
+        struct inode *inode;
+        const char *name = dentry->d_name.name;
+        int namelen = dentry->d_name.len;
+        int err, nid;
+
+        if (numbfs_inode_by_name(dir, dentry->d_name.name,
+                        dentry->d_name.len, &nid, NULL) != -ENOENT)
+                return -EEXIST;
+
+        mode |= S_IFDIR;
+        inode = numbfs_dir_ialloc(dir, mode);
+        if (IS_ERR(inode))
+                return PTR_ERR(inode);
+
+        d_instantiate_new(dentry, inode);
+
+        err = numbfs_make_empty(inode, dir, mode, inode->i_ino);
+        if (err)
+                return err;
+
+        return numbfs_write_dir(dir, mode, name, namelen, inode->i_ino, 0);
+}
 
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
+        .mkdir          = numbfs_dir_mkdir,
 };
 
 const struct file_operations numbfs_dir_fops = {

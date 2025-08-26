@@ -7,6 +7,7 @@ set -e
 
 MOUNT_POINT=$1
 NUMBFS_ROOT=$2
+IMAGE_NAME=$3
 
 echo "Testing directory creation functionality"
 

@@ -74,6 +74,12 @@ jobs:
             ./tests/create.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # mkdir test
+          if [ -f "tests/mkdir.sh" ]; then
+            echo "Running mkdir tests..."
+            ./tests/mkdir.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

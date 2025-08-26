@@ -384,12 +384,78 @@ static int numbfs_dir_rmdir(struct inode *dir, struct dentry *dentry)
 	return err;
 }
 
+static int numbfs_dir_rename(struct mnt_idmap *idmap,
+                struct inode *old_dir, struct dentry *old_dentry,
+                struct inode *new_dir, struct dentry *new_dentry,
+                unsigned int flags)
+{
+        struct inode *old_inode = d_inode(old_dentry);
+        struct inode *new_inode = d_inode(new_dentry);
+        struct numbfs_dirent de;
+        struct numbfs_buf buf;
+        int err, nid, offset;
+
+        /* delete the dirent in new_dir */
+        if (new_inode) {
+                if (S_ISDIR(new_inode->i_mode))
+                        err = numbfs_dir_rmdir(new_dir, new_dentry);
+                else
+                        err = numbfs_dir_unlink(new_dir, new_dentry);
+                if (err)
+                        return err;
+        }
+
+        /* delete the dirent in old_dir */
+        err = numbfs_inode_by_name(old_dir, old_dentry->d_name.name,
+                        old_dentry->d_name.len, &nid, &offset);
+        if (err)
+                return err;
+
+        numbfs_init_buf(&buf, old_dir, offset >> NUMBFS_BLOCK_BITS);
+        err = numbfs_read_buf(&buf);
+        if (err)
+                return err;
+        memcpy(&de, (char*)buf.base + (offset & (folio_size(buf.folio)- 1)),
+               sizeof(struct numbfs_dirent));
+        numbfs_put_buf(&buf);
+
+        err = numbfs_delete_entry(old_dir, nid, offset);
+        if (err)
+                return err;
+
+        /* append the dirent in new_dir */
+        err = numbfs_write_dir(new_dir, old_inode->i_mode, new_dentry->d_name.name,
+                        new_dentry->d_name.len, le16_to_cpu(de.ino), 0);
+        if (err)
+                return err;
+
+        /* if dirent is dir, change the ".." */
+        if (de.type == DT_DIR) {
+                struct inode *target;
+
+                target = numbfs_iget(old_inode->i_sb, le16_to_cpu(de.ino));
+                if (IS_ERR(target))
+                        return PTR_ERR(target);
+
+                err = numbfs_inode_by_name(target, DOTDOT, DOTDOTLEN, &nid, &offset);
+                if (err)
+                        return err;
+
+                err = numbfs_write_dir(target, S_IFDIR, DOTDOT, DOTDOTLEN,
+                                       new_dir->i_ino, offset);
+                if (err)
+                        return err;
+        }
+        return 0;
+}
+
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
         .mkdir          = numbfs_dir_mkdir,
         .unlink         = numbfs_dir_unlink,
         .rmdir          = numbfs_dir_rmdir,
+        .rename         = numbfs_dir_rename,
 };
 
 const struct file_operations numbfs_dir_fops = {

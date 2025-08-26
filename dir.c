@@ -283,10 +283,68 @@ static int numbfs_dir_mkdir(struct mnt_idmap *idmap, struct inode *dir,
         return numbfs_write_dir(dir, mode, name, namelen, inode->i_ino, 0);
 }
 
+static int numbfs_delete_entry(struct inode *dir, int nid, int offset)
+{
+        struct folio *folio, *last_folio;
+        struct numbfs_dirent *de_from, *de_to;
+        void *kaddr_from, *kaddr_to;
+        int size = i_size_read(dir);
+
+        folio = read_cache_folio(dir->i_mapping, offset >> PAGE_SHIFT,
+                                 NULL, NULL);
+        if (IS_ERR(folio))
+                return PTR_ERR(folio);
+
+        last_folio = read_cache_folio(dir->i_mapping, size >> PAGE_SHIFT,
+                                      NULL, NULL);
+        if (IS_ERR(last_folio))
+                return PTR_ERR(last_folio);
+
+        folio_lock(folio);
+        kaddr_to = kmap_local_folio(folio, 0);
+        kaddr_from = kmap_local_folio(last_folio, 0);
+        de_from = (struct numbfs_dirent*)(kaddr_from +
+                        (size & (folio_size(last_folio) - 1)) - sizeof(*de_from));
+        de_to = (struct numbfs_dirent*)(kaddr_to + (offset & (folio_size(folio) - 1)));
+        memcpy(de_to, de_from, sizeof(struct numbfs_dirent));
+
+        iomap_dirty_folio(dir->i_mapping, folio);
+        folio_unlock(folio);
+
+        folio_release_kmap(folio, kaddr_to);
+        folio_release_kmap(last_folio, kaddr_from);
+
+        numbfs_setsize(dir, size - sizeof(struct numbfs_dirent));
+        mark_inode_dirty(dir);
+
+        return 0;
+}
+
+static int numbfs_dir_unlink(struct inode *dir, struct dentry *dentry)
+{
+        int nid, offset, err;
+
+        err = numbfs_inode_by_name(dir, dentry->d_name.name,
+                        dentry->d_name.len, &nid, &offset);
+        if (err < 0) {
+                if (err == -ENOENT)
+                        return 0;
+                return err;
+        }
+
+        err = numbfs_delete_entry(dir, nid, offset);
+        if (err)
+                return err;
+
+	inode_dec_link_count(d_inode(dentry));
+        return 0;
+}
+
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
         .mkdir          = numbfs_dir_mkdir,
+        .unlink         = numbfs_dir_unlink,
 };
 
 const struct file_operations numbfs_dir_fops = {

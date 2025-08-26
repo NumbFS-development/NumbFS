@@ -80,6 +80,12 @@ jobs:
             ./tests/mkdir.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # unlink test
+          if [ -f "tests/unlink.sh" ]; then
+            echo "Running unlink tests..."
+            ./tests/unlink.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

@@ -98,6 +98,12 @@ jobs:
             ./tests/rename.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # hard/soft link test
+          if [ -f "tests/link.sh" ]; then
+            echo "Running hard/soft link tests..."
+            ./tests/link.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

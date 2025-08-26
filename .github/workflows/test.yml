@@ -92,6 +92,12 @@ jobs:
             ./tests/rmdir.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # rename test
+          if [ -f "tests/rename.sh" ]; then
+            echo "Running rename tests..."
+            ./tests/rename.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

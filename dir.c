@@ -340,11 +340,56 @@ static int numbfs_dir_unlink(struct inode *dir, struct dentry *dentry)
         return 0;
 }
 
+static bool numbfs_is_empty(struct inode *dir)
+{
+        int err, nid, offset;
+
+        BUG_ON(i_size_read(dir) < 2 * sizeof(struct numbfs_dirent));
+
+        if (i_size_read(dir) != 2 * sizeof(struct numbfs_dirent))
+                return false;
+
+        err = numbfs_inode_by_name(dir, DOT, DOTLEN, &nid, &offset);
+        if (err)
+                return false;
+
+        err = numbfs_inode_by_name(dir, DOTDOT, DOTDOTLEN, &nid, &offset);
+        if (err)
+                return false;
+
+        return true;
+}
+
+static int numbfs_dir_rmdir(struct inode *dir, struct dentry *dentry)
+{
+        int offset, nid;
+	int err;
+
+        err = numbfs_inode_by_name(dir, dentry->d_name.name,
+                        dentry->d_name.len, &nid, &offset);
+        if (err < 0) {
+                if (err == -ENOENT)
+                        return 0;
+                return err;
+        }
+
+	err = -ENOTEMPTY;
+	if (numbfs_is_empty(d_inode(dentry))) {
+                err = numbfs_delete_entry(dir, nid, offset);
+                if (err)
+                        return err;
+	        inode_dec_link_count(d_inode(dentry));
+	        inode_dec_link_count(d_inode(dentry));
+	}
+	return err;
+}
+
 const struct inode_operations numbfs_dir_iops = {
         .lookup         = numbfs_dir_lookup,
         .create         = numbfs_dir_create,
         .mkdir          = numbfs_dir_mkdir,
         .unlink         = numbfs_dir_unlink,
+        .rmdir          = numbfs_dir_rmdir,
 };
 
 const struct file_operations numbfs_dir_fops = {

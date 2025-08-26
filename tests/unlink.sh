@@ -52,4 +52,3 @@ fi
 echo "SUCCESS: Test file no longer exists after unlink and remount"
 
 echo "All tests passed for unlink functionality"
-sudo umount $MOUNT_POINT

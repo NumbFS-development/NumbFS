@@ -443,6 +443,7 @@ static int numbfs_dir_rename(struct mnt_idmap *idmap,
 
                 err = numbfs_write_dir(target, S_IFDIR, DOTDOT, DOTDOTLEN,
                                        new_dir->i_ino, offset);
+                iput(target);
                 if (err)
                         return err;
         }

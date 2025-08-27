@@ -78,3 +78,6 @@ const struct address_space_operations numbfs_aops = {
         .read_folio             = numbfs_read_folio,
         .writepages             = numbfs_writepages,
 };
+
+const struct file_operations numbfs_file_fops = {
+};

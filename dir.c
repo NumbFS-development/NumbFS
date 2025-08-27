@@ -25,7 +25,7 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
 {
         struct numbfs_dirent *de;
         struct numbfs_buf buf;
-        int i, ret, err;
+        int i, ret, err, off;
 
         ret = -ENOENT;
         for (i = 0; i < dir->i_size; i += sizeof(*de)) {
@@ -38,7 +38,9 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
                         if (err)
                                 return err;
                 }
+                off = (i >> NUMBFS_BLOCK_BITS) << NUMBFS_BLOCK_BITS;
                 de = (struct numbfs_dirent*)((unsigned char*)buf.base +
+                                (off & (folio_size(buf.folio) - 1)) +
                                 (i % NUMBFS_BYTES_PER_BLOCK));
                 if (de->name_len == namelen &&
                     !memcmp(name, de->name, namelen)) {
@@ -61,7 +63,7 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
         size_t dirsize = i_size_read(dir);
         struct numbfs_buf buf;
         struct numbfs_dirent *de;
-        int err;
+        int err, off;
 
         while (ctx->pos < dirsize) {
                 const char *de_name;
@@ -80,7 +82,9 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
 
                 }
 
+                off = (ctx->pos >> NUMBFS_BLOCK_BITS) << NUMBFS_BLOCK_BITS;
                 de = (struct numbfs_dirent*)((unsigned char*)buf.base +
+                                (off & (folio_size(buf.folio) - 1)) +
                                 (ctx->pos % NUMBFS_BYTES_PER_BLOCK));
                 de_name = de->name;
                 de_namelen = de->name_len;
@@ -443,10 +447,88 @@ static int numbfs_dir_rename(struct mnt_idmap *idmap,
 
                 err = numbfs_write_dir(target, S_IFDIR, DOTDOT, DOTDOTLEN,
                                        new_dir->i_ino, offset);
+                iput(target);
                 if (err)
                         return err;
         }
         return 0;
+}
+
+static int numbfs_dir_link(struct dentry *old_dentry, struct inode *dir,
+	                   struct dentry *dentry)
+{
+        struct inode *inode = d_inode(old_dentry);
+        const char *name = dentry->d_name.name;
+        int namelen = dentry->d_name.len;
+        int err, nid, off;
+
+        if (S_ISDIR(inode->i_mode))
+                return -EPERM;
+
+        if (dir->i_sb != inode->i_sb)
+                return -EXDEV;
+
+        err = numbfs_inode_by_name(dir, name, namelen, &nid, &off);
+        if (err != -ENOENT)
+                return -EEXIST;
+
+        inode_inc_link_count(inode);
+        ihold(inode);
+
+        err = numbfs_write_dir(dir, inode->i_mode & S_IFMT, name,
+                               namelen, inode->i_ino, 0);
+        if (!err) {
+		d_instantiate(dentry, inode);
+		return 0;
+        }
+
+	inode_dec_link_count(inode);
+	iput(inode);
+	return err;
+}
+
+static int numbfs_dir_symlink(struct mnt_idmap *idmap, struct inode *dir,
+	                      struct dentry * dentry, const char * symname)
+{
+        struct inode *inode;
+        struct folio *folio;
+        int err, nid, off;
+        void *kaddr;
+
+        if (strlen(symname) > NUMBFS_BYTES_PER_BLOCK)
+                return -ENAMETOOLONG;
+
+        err = numbfs_inode_by_name(dir, dentry->d_name.name,
+                                   dentry->d_name.len, &nid, &off);
+        if (err != -ENOENT)
+                return -EEXIST;
+
+        /* alloc inode */
+        inode = numbfs_dir_ialloc(dir, S_IFLNK | 0444);
+        if (IS_ERR(inode))
+                return PTR_ERR(inode);
+
+        /* copy symname */
+        folio = read_cache_folio(inode->i_mapping, 0, NULL, NULL);
+        if (IS_ERR(folio))
+                return PTR_ERR(folio);
+
+        folio_lock(folio);
+        kaddr = kmap_local_folio(folio, 0);
+        memcpy(kaddr, symname, strlen(symname));
+        iomap_dirty_folio(inode->i_mapping, folio);
+        folio_unlock(folio);
+
+        folio_release_kmap(folio, kaddr);
+        numbfs_setsize(inode, strlen(symname));
+        mark_inode_dirty(inode);
+
+        /* instantiate inode and dentry */
+        d_instantiate_new(dentry, inode);
+
+        /* append dirent */
+        return numbfs_write_dir(dir, S_IFLNK, dentry->d_name.name,
+                                dentry->d_name.len, inode->i_ino, 0);
 }
 
 const struct inode_operations numbfs_dir_iops = {
@@ -456,6 +538,8 @@ const struct inode_operations numbfs_dir_iops = {
         .unlink         = numbfs_dir_unlink,
         .rmdir          = numbfs_dir_rmdir,
         .rename         = numbfs_dir_rename,
+        .link           = numbfs_dir_link,
+        .symlink        = numbfs_dir_symlink,
 };
 
 const struct file_operations numbfs_dir_fops = {

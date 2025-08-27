@@ -79,5 +79,34 @@ const struct address_space_operations numbfs_aops = {
         .writepages             = numbfs_writepages,
 };
 
+static int numbfs_iomap_write_begin(struct inode *inode, loff_t offset,
+                loff_t length, unsigned int flags, struct iomap *iomap,
+                struct iomap *srcmap)
+{
+        return numbfs_iomap(inode, offset, length, iomap, NUMBFS_WRITE);
+}
+
+const struct iomap_ops numbfs_iomap_write_ops = {
+        .iomap_begin    = numbfs_iomap_write_begin,
+};
+
+static ssize_t numbfs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
+{
+        if (!iov_iter_count(to))
+                return 0;
+
+        return filemap_read(iocb, to, 0);
+}
+
+static ssize_t numbfs_file_write_iter(struct kiocb *iocb,
+                                      struct iov_iter *from)
+{
+        return iomap_file_buffered_write(iocb, from, &numbfs_iomap_write_ops);
+}
+
 const struct file_operations numbfs_file_fops = {
+        .llseek         = generic_file_llseek,
+        .read_iter      = numbfs_file_read_iter,
+        .write_iter     = numbfs_file_write_iter,
+
 };

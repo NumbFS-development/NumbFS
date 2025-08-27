@@ -104,6 +104,12 @@ jobs:
             ./tests/link.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
+          # read/write test
+          if [ -f "tests/read_write.sh" ]; then
+            echo "Running read/write tests..."
+            ./tests/read_write.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
       - name: Cleanup
         run: |
           cd $NUMBFS_ROOT

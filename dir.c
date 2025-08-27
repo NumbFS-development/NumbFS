@@ -25,7 +25,7 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
 {
         struct numbfs_dirent *de;
         struct numbfs_buf buf;
-        int i, ret, err;
+        int i, ret, err, off;
 
         ret = -ENOENT;
         for (i = 0; i < dir->i_size; i += sizeof(*de)) {
@@ -38,7 +38,9 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
                         if (err)
                                 return err;
                 }
+                off = (i >> NUMBFS_BLOCK_BITS) << NUMBFS_BLOCK_BITS;
                 de = (struct numbfs_dirent*)((unsigned char*)buf.base +
+                                (off & (folio_size(buf.folio) - 1)) +
                                 (i % NUMBFS_BYTES_PER_BLOCK));
                 if (de->name_len == namelen &&
                     !memcmp(name, de->name, namelen)) {
@@ -61,7 +63,7 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
         size_t dirsize = i_size_read(dir);
         struct numbfs_buf buf;
         struct numbfs_dirent *de;
-        int err;
+        int err, off;
 
         while (ctx->pos < dirsize) {
                 const char *de_name;
@@ -80,7 +82,9 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
 
                 }
 
+                off = (ctx->pos >> NUMBFS_BLOCK_BITS) << NUMBFS_BLOCK_BITS;
                 de = (struct numbfs_dirent*)((unsigned char*)buf.base +
+                                (off & (folio_size(buf.folio) - 1)) +
                                 (ctx->pos % NUMBFS_BYTES_PER_BLOCK));
                 de_name = de->name;
                 de_namelen = de->name_len;

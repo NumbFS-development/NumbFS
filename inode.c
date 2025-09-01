@@ -10,12 +10,12 @@
 void numbfs_file_set_ops(struct inode *inode)
 {
 	if (S_ISLNK(inode->i_mode)) {
-		inode->i_op = &numbfs_symlink_iops;
-		inode->i_fop = &numbfs_file_fops;
+		inode->i_op             = &numbfs_symlink_iops;
+		inode->i_fop            = &numbfs_file_fops;
 		inode->i_mapping->a_ops = &numbfs_aops;
 	} else {
-		inode->i_op = &numbfs_generic_iops;
-		inode->i_fop = &numbfs_file_fops;
+		inode->i_op             = &numbfs_generic_iops;
+		inode->i_fop            = &numbfs_file_fops;
 		inode->i_mapping->a_ops = &numbfs_aops;
 	}
 }
@@ -53,11 +53,11 @@ static int numbfs_fill_inode(struct inode *inode)
                 return PTR_ERR(di);
         }
 
-        inode->i_mode = le32_to_cpu(di->i_mode);
         i_uid_write(inode, le16_to_cpu(di->i_uid));
         i_gid_write(inode, le16_to_cpu(di->i_gid));
         set_nlink(inode, le16_to_cpu(di->i_nlink));
-        inode->i_size = le32_to_cpu(di->i_size);
+        inode->i_mode   = le32_to_cpu(di->i_mode);
+        inode->i_size   = le32_to_cpu(di->i_size);
         inode->i_blocks = round_up(inode->i_size, sb->s_blocksize) >> 9;
 
         ni->sbi = NUMBFS_SB(sb);

@@ -47,7 +47,8 @@ static void numbfs_put_super(struct super_block *sb)
         int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
         int err = 0;
 
-        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        numbfs_init_buf(&buf, sb->s_bdev->bd_inode,
+                        NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
         err = numbfs_read_buf(&buf);
         if (err) {
                 pr_err("numbfs: failed to read superblock\n");
@@ -83,12 +84,12 @@ static void numbfs_dump_inode(struct inode *inode, struct numbfs_inode *di)
         struct numbfs_inode_info *ni = NUMBFS_I(inode);
         int i;
 
-        di->i_ino = cpu_to_le16(inode->i_ino);
-        di->i_mode = cpu_to_le32(inode->i_mode);
-        di->i_nlink = cpu_to_le16(inode->i_nlink);
-        di->i_uid = cpu_to_le16(__kuid_val(inode->i_uid));
-        di->i_gid = cpu_to_le16(__kgid_val(inode->i_gid));
-        di->i_size = cpu_to_le32(inode->i_size);
+        di->i_ino       = cpu_to_le16(inode->i_ino);
+        di->i_mode      = cpu_to_le32(inode->i_mode);
+        di->i_nlink     = cpu_to_le16(inode->i_nlink);
+        di->i_uid       = cpu_to_le16(__kuid_val(inode->i_uid));
+        di->i_gid       = cpu_to_le16(__kgid_val(inode->i_gid));
+        di->i_size      = cpu_to_le32(inode->i_size);
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 di->i_data[i] = cpu_to_le32(ni->data[i]);
 }
@@ -174,16 +175,16 @@ static int numbfs_read_superblock(struct super_block *sb)
                 goto exit;
         }
 
-        sbi->feature = le32_to_cpu(nsb->s_feature);
-        sbi->total_inodes = le32_to_cpu(nsb->s_total_inodes);
-        sbi->free_inodes = le32_to_cpu(nsb->s_free_inodes);
-        sbi->data_blocks = le32_to_cpu(nsb->s_data_blocks);
-        sbi->free_blocks = le32_to_cpu(nsb->s_free_blocks);
-        sbi->ibitmap_start = le32_to_cpu(nsb->s_ibitmap_start);
-        sbi->inode_start = le32_to_cpu(nsb->s_inode_start);
-        sbi->bbitmap_start = le32_to_cpu(nsb->s_bbitmap_start);
-        sbi->data_start = le32_to_cpu(nsb->s_data_start);
-        sbi->block_bits = NUMBFS_BLOCK_BITS;
+        sbi->feature            = le32_to_cpu(nsb->s_feature);
+        sbi->total_inodes       = le32_to_cpu(nsb->s_total_inodes);
+        sbi->free_inodes        = le32_to_cpu(nsb->s_free_inodes);
+        sbi->data_blocks        = le32_to_cpu(nsb->s_data_blocks);
+        sbi->free_blocks        = le32_to_cpu(nsb->s_free_blocks);
+        sbi->ibitmap_start      = le32_to_cpu(nsb->s_ibitmap_start);
+        sbi->inode_start        = le32_to_cpu(nsb->s_inode_start);
+        sbi->bbitmap_start      = le32_to_cpu(nsb->s_bbitmap_start);
+        sbi->data_start         = le32_to_cpu(nsb->s_data_start);
+        sbi->block_bits         = NUMBFS_BLOCK_BITS;
 
         err = 0;
 exit:
@@ -282,11 +283,11 @@ static void numbfs_kill_sb(struct super_block *sb)
 }
 
 struct file_system_type numbfs_fs_type = {
-	.owner = THIS_MODULE,
-	.name = "numbfs",
-	.init_fs_context = numbfs_init_fs_context,
-	.kill_sb = numbfs_kill_sb,
-	.fs_flags = FS_REQUIRES_DEV | FS_ALLOW_IDMAP,
+	.owner                  = THIS_MODULE,
+	.name                   = "numbfs",
+	.init_fs_context        = numbfs_init_fs_context,
+	.kill_sb                = numbfs_kill_sb,
+	.fs_flags               = FS_REQUIRES_DEV | FS_ALLOW_IDMAP,
 };
 MODULE_ALIAS_FS("numbfs");
 

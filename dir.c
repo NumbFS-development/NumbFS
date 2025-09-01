@@ -14,8 +14,8 @@
 
 void numbfs_dir_set_ops(struct inode *inode)
 {
-        inode->i_op = &numbfs_dir_iops;
-        inode->i_fop = &numbfs_dir_fops;
+        inode->i_op             = &numbfs_dir_iops;
+        inode->i_fop            = &numbfs_dir_fops;
         inode->i_mapping->a_ops = &numbfs_aops;
 }
 
@@ -73,7 +73,8 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
                 if (ctx->pos % NUMBFS_BYTES_PER_BLOCK == 0) {
                         if (ctx->pos > 0)
                                 numbfs_put_buf(&buf);
-                        numbfs_init_buf(&buf, dir, ctx->pos / NUMBFS_BYTES_PER_BLOCK);
+                        numbfs_init_buf(&buf, dir,
+                                        ctx->pos / NUMBFS_BYTES_PER_BLOCK);
                         err = numbfs_read_buf(&buf);
                         if (err) {
                                 pr_info("numbfs: error to read dir block@%lld, err: %d\n", ctx->pos / NUMBFS_BYTES_PER_BLOCK, err);
@@ -292,6 +293,7 @@ static int numbfs_delete_entry(struct inode *dir, int nid, int offset)
         struct folio *folio, *last_folio;
         struct numbfs_dirent *de_from, *de_to;
         void *kaddr_from, *kaddr_to;
+        int off_from, off_to;
         int size = i_size_read(dir);
 
         folio = read_cache_folio(dir->i_mapping, offset >> PAGE_SHIFT,
@@ -307,9 +309,10 @@ static int numbfs_delete_entry(struct inode *dir, int nid, int offset)
         folio_lock(folio);
         kaddr_to = kmap_local_folio(folio, 0);
         kaddr_from = kmap_local_folio(last_folio, 0);
-        de_from = (struct numbfs_dirent*)(kaddr_from +
-                        (size & (folio_size(last_folio) - 1)) - sizeof(*de_from));
-        de_to = (struct numbfs_dirent*)(kaddr_to + (offset & (folio_size(folio) - 1)));
+        off_from = (size & (folio_size(last_folio) - 1)) - sizeof(*de_from);
+        off_to = (offset & (folio_size(folio) - 1));
+        de_from = (struct numbfs_dirent*)(kaddr_from + off_from);
+        de_to = (struct numbfs_dirent*)(kaddr_to + off_to);
         memcpy(de_to, de_from, sizeof(struct numbfs_dirent));
 
         iomap_dirty_folio(dir->i_mapping, folio);

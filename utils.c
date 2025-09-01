@@ -126,18 +126,23 @@ static int numbfs_bitmap_alloc(struct super_block *sb, int startblk,
                 goto out;
         for (i = 0; i < total; i++) {
                 if (i % NUMBFS_BLOCKS_PER_BLOCK == 0) {
+                        int off;
+
                         if (i > 0) {
                                 numbfs_commit_buf(&buf);
                                 numbfs_put_buf(&buf);
                         }
-                        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, numbfs_bmap_blk(startblk, i));
+                        numbfs_init_buf(&buf, sb->s_bdev->bd_inode,
+                                        numbfs_bmap_blk(startblk, i));
                         err = numbfs_read_buf(&buf);
                         if (err) {
                                 pr_err("numbfs: failed to read bitmap block@%d\n", buf.blkaddr);
                                 goto out;
                         }
-                        bitmap = (unsigned char*)buf.base +
-                                ((buf.blkaddr << NUMBFS_BLOCK_BITS) & (PAGE_SIZE - 1));
+
+                        off = (buf.blkaddr << NUMBFS_BLOCK_BITS) &
+                                        (folio_size(buf.folio) - 1);
+                        bitmap = (unsigned char*)buf.base + off;
                 }
 
 
@@ -229,7 +234,7 @@ int numbfs_ialloc(struct super_block *sb, int *nid)
         int res, err;
 
         err = numbfs_bitmap_alloc(sb, sbi->ibitmap_start, sbi->total_inodes,
-                                &res, &sbi->free_inodes);
+                                  &res, &sbi->free_inodes);
         if (err)
                 return err;
 

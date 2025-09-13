@@ -8,8 +8,55 @@
 #include <linux/mpage.h>
 #include <linux/iomap.h>
 
-#define NUMBFS_READ     0
-#define NUMBFS_WRITE    1
+int numbfs_binit(struct numbfs_buf *buf, struct block_device *bdev,
+                 int blk)
+{
+        struct folio *folio;
+
+        folio = folio_alloc(GFP_KERNEL, 0);
+        if (!folio)
+                return -ENOMEM;
+
+        buf->bdev = bdev;
+        buf->folio = folio;
+        buf->blkaddr = blk;
+        buf->base = kmap_local_folio(folio, 0);
+        return 0;
+}
+
+void numbfs_bput(struct numbfs_buf *buf)
+{
+        if (!buf->folio)
+                return;
+
+        kunmap_local(buf->base);
+        buf->base = NULL;
+        folio_put(buf->folio);
+        buf->folio = NULL;
+}
+
+int numbfs_brw(struct numbfs_buf *buf, int read)
+{
+        struct bio *bio;
+        int err;
+
+	bio = bio_alloc(buf->bdev, 1,
+                        read == NUMBFS_READ ? REQ_OP_READ : REQ_OP_WRITE,
+                        GFP_NOFS);
+        if (!bio)
+                return -ENOMEM;
+
+        bio->bi_iter.bi_sector = buf->blkaddr;
+        err = bio_add_folio(bio, buf->folio, folio_size(buf->folio), 0);
+        if (!err)
+                return -EIO;
+
+        /* here, let's wait the bio complete */
+        err = submit_bio_wait(bio);
+        bio_put(bio);
+
+        return err;
+}
 
 static int numbfs_iomap(struct inode *inode, loff_t offset, loff_t length,
                         struct iomap *iomap, int type)
@@ -110,5 +157,4 @@ const struct file_operations numbfs_file_fops = {
         .llseek         = generic_file_llseek,
         .read_iter      = numbfs_file_read_iter,
         .write_iter     = numbfs_file_write_iter,
-
 };

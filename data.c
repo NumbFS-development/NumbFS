@@ -77,6 +77,8 @@ static int numbfs_writepages(struct address_space *mapping,
 const struct address_space_operations numbfs_aops = {
         .read_folio             = numbfs_read_folio,
         .writepages             = numbfs_writepages,
+	.release_folio          = iomap_release_folio,
+	.invalidate_folio       = iomap_invalidate_folio,
 };
 
 static int numbfs_iomap_write_begin(struct inode *inode, loff_t offset,

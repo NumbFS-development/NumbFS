@@ -44,19 +44,23 @@ static void numbfs_put_super(struct super_block *sb)
         struct numbfs_buf buf;
         struct numbfs_super_block *nsb;
         struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
-        int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
         int err = 0;
 
-        numbfs_init_buf(&buf, sb->s_bdev->bd_inode,
-                        NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
-        err = numbfs_read_buf(&buf);
+        err = numbfs_binit(&buf, sb->s_bdev, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        if (err) {
+                pr_err("numbfs: failed to init buffer\n");
+                goto exit;
+        }
+
+        err = numbfs_brw(&buf, NUMBFS_READ);
+        if (err)
         if (err) {
                 pr_err("numbfs: failed to read superblock\n");
                 goto exit;
         }
 
         err = -EINVAL;
-        nsb = (struct numbfs_super_block*)(buf.base + offset);
+        nsb = (struct numbfs_super_block*)buf.base;
         if (le32_to_cpu(nsb->s_magic) != NUMBFS_MAGIC) {
                 pr_err("numbfs: can not find a valid superblock\n");
                 goto exit;
@@ -72,11 +76,11 @@ static void numbfs_put_super(struct super_block *sb)
         nsb->s_bbitmap_start    = cpu_to_le32(sbi->bbitmap_start);
         nsb->s_data_start       = cpu_to_le32(sbi->data_start);
 
-        err = numbfs_commit_buf(&buf);
+        err = numbfs_brw(&buf, NUMBFS_WRITE);
         if (err)
                 pr_err("numbfs: failded to write superblock to disk.\n");
 exit:
-        numbfs_put_buf(&buf);
+        numbfs_bput(&buf);
 }
 
 static void numbfs_dump_inode(struct inode *inode, struct numbfs_inode *di)
@@ -107,12 +111,10 @@ static int numbfs_write_inode_meta(struct inode *inode)
                 goto out;
         }
 
-        folio_lock(buf.folio);
         numbfs_dump_inode(inode, di);
-        err = numbfs_commit_buf(&buf);
-        folio_unlock(buf.folio);
+        err = numbfs_brw(&buf, NUMBFS_WRITE);
 out:
-        numbfs_put_buf(&buf);
+        numbfs_bput(&buf);
         return err;
 }
 
@@ -157,19 +159,22 @@ static int numbfs_read_superblock(struct super_block *sb)
         struct numbfs_buf buf;
         struct numbfs_super_block *nsb;
         struct numbfs_superblock_info *sbi = NUMBFS_SB(sb);
-        int offset = NUMBFS_SUPER_OFFSET & (PAGE_SIZE - 1);
         int err = 0;
 
-        numbfs_init_buf(&buf, sb->s_bdev->bd_inode, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        err = numbfs_binit(&buf, sb->s_bdev, NUMBFS_SUPER_OFFSET >> NUMBFS_BLOCK_BITS);
+        if (err) {
+                pr_err("numbfs: failed to init buffer\n");
+                goto exit;
+        }
 
-        err = numbfs_read_buf(&buf);
+        err = numbfs_brw(&buf, NUMBFS_READ);
         if (err) {
                 pr_err("numbfs: failed to read superblock\n");
                 goto exit;
         }
 
         err = -EINVAL;
-        nsb = (struct numbfs_super_block*)(buf.base + offset);
+        nsb = (struct numbfs_super_block*)buf.base;
         if (le32_to_cpu(nsb->s_magic) != NUMBFS_MAGIC) {
                 pr_err("numbfs: can not find a valid superblock\n");
                 goto exit;
@@ -188,7 +193,7 @@ static int numbfs_read_superblock(struct super_block *sb)
 
         err = 0;
 exit:
-        numbfs_put_buf(&buf);
+        numbfs_bput(&buf);
         return err;
 }
 

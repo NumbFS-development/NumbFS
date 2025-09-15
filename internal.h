@@ -31,6 +31,7 @@
 #include <linux/spinlock.h>
 #include <linux/statfs.h>
 #include <linux/mutex.h>
+#include <linux/bio.h>
 
 #define NUMBFS_BLOCK_BITS	9
 #define NUMBFS_BLOCK_SIZE	(1 << NUMBFS_BLOCK_BITS)
@@ -54,7 +55,10 @@ struct numbfs_superblock_info {
  };
 
 struct numbfs_buf {
+	/* for the address space of a inode */
 	struct inode *inode;
+	/* for the address space of disk */
+	struct block_device *bdev;
 	int blkaddr;
 	void *base;
 	struct folio *folio;
@@ -126,12 +130,20 @@ static inline int numbfs_data_blk(struct numbfs_superblock_info *sbi,
         return sbi->data_start + blk;
 }
 
-/* read metadata */
-void numbfs_init_buf(struct numbfs_buf *buf, struct inode *inode,
-			 int blk);
-int numbfs_read_buf(struct numbfs_buf *buf);
-int numbfs_commit_buf(struct numbfs_buf *buf);
-void numbfs_put_buf(struct numbfs_buf *buf);
+/* read inode data */
+void numbfs_ibuf_init(struct numbfs_buf *buf, struct inode *inode, int blk);
+int numbfs_ibuf_read(struct numbfs_buf *buf);
+void numbfs_ibuf_put(struct numbfs_buf *buf);
+
+/* read disk data via bio */
+#define NUMBFS_READ     0
+#define NUMBFS_WRITE    1
+
+int numbfs_binit(struct numbfs_buf *buf, struct block_device *bdev,
+		 int blk);
+int numbfs_brw(struct numbfs_buf *buf, int rw);
+void numbfs_bput(struct numbfs_buf *buf);
+
 
 /* caller should put the buf */
 struct numbfs_inode *numbfs_idisk(struct numbfs_buf *buf,

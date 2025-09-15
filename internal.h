@@ -55,7 +55,9 @@ struct numbfs_superblock_info {
  };
 
 struct numbfs_buf {
+	/* for the address space of a inode */
 	struct inode *inode;
+	/* for the address space of disk */
 	struct block_device *bdev;
 	int blkaddr;
 	void *base;
@@ -128,14 +130,12 @@ static inline int numbfs_data_blk(struct numbfs_superblock_info *sbi,
         return sbi->data_start + blk;
 }
 
-/* read metadata */
-void numbfs_init_buf(struct numbfs_buf *buf, struct inode *inode,
-			 int blk);
-int numbfs_read_buf(struct numbfs_buf *buf);
-int numbfs_commit_buf(struct numbfs_buf *buf);
-void numbfs_put_buf(struct numbfs_buf *buf);
+/* read inode data */
+void numbfs_ibuf_init(struct numbfs_buf *buf, struct inode *inode, int blk);
+int numbfs_ibuf_read(struct numbfs_buf *buf);
+void numbfs_ibuf_put(struct numbfs_buf *buf);
 
-/* read metadata via bio */
+/* read disk data via bio */
 #define NUMBFS_READ     0
 #define NUMBFS_WRITE    1
 

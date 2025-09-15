@@ -31,10 +31,10 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
         for (i = 0; i < dir->i_size; i += sizeof(*de)) {
                 if (i % NUMBFS_BYTES_PER_BLOCK == 0) {
                         if (i > 0)
-                                numbfs_put_buf(&buf);
+                                numbfs_ibuf_put(&buf);
 
-                        numbfs_init_buf(&buf, dir, i / NUMBFS_BYTES_PER_BLOCK);
-                        err = numbfs_read_buf(&buf);
+                        numbfs_ibuf_init(&buf, dir, i / NUMBFS_BYTES_PER_BLOCK);
+                        err = numbfs_ibuf_read(&buf);
                         if (err)
                                 return err;
                 }
@@ -53,7 +53,7 @@ static int numbfs_inode_by_name(struct inode *dir, const char *name,
 
         }
 
-        numbfs_put_buf(&buf);
+        numbfs_ibuf_put(&buf);
         return ret;
 }
 
@@ -72,10 +72,10 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
 
                 if (ctx->pos % NUMBFS_BYTES_PER_BLOCK == 0) {
                         if (ctx->pos > 0)
-                                numbfs_put_buf(&buf);
-                        numbfs_init_buf(&buf, dir,
-                                        ctx->pos / NUMBFS_BYTES_PER_BLOCK);
-                        err = numbfs_read_buf(&buf);
+                                numbfs_ibuf_put(&buf);
+                        numbfs_ibuf_init(&buf, dir,
+                                         ctx->pos / NUMBFS_BYTES_PER_BLOCK);
+                        err = numbfs_ibuf_read(&buf);
                         if (err) {
                                 pr_info("numbfs: error to read dir block@%lld, err: %d\n", ctx->pos / NUMBFS_BYTES_PER_BLOCK, err);
                                 goto out;
@@ -104,7 +104,7 @@ static int numbfs_readdir(struct file *file, struct dir_context *ctx)
                 }
         }
 out:
-        numbfs_put_buf(&buf);
+        numbfs_ibuf_put(&buf);
         return err;
 }
 
@@ -418,13 +418,13 @@ static int numbfs_dir_rename(struct mnt_idmap *idmap,
         if (err)
                 return err;
 
-        numbfs_init_buf(&buf, old_dir, offset >> NUMBFS_BLOCK_BITS);
-        err = numbfs_read_buf(&buf);
+        numbfs_ibuf_init(&buf, old_dir, offset >> NUMBFS_BLOCK_BITS);
+        err = numbfs_ibuf_read(&buf);
         if (err)
                 return err;
         memcpy(&de, (char*)buf.base + (offset & (folio_size(buf.folio)- 1)),
                sizeof(struct numbfs_dirent));
-        numbfs_put_buf(&buf);
+        numbfs_ibuf_put(&buf);
 
         err = numbfs_delete_entry(old_dir, nid, offset);
         if (err)

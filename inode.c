@@ -49,7 +49,7 @@ static int numbfs_fill_inode(struct inode *inode)
         /* on-disk inode information */
         di = numbfs_idisk(&buf, sb, inode->i_ino);
         if (IS_ERR(di)) {
-                numbfs_put_buf(&buf);
+                numbfs_ibuf_put(&buf);
                 return PTR_ERR(di);
         }
 
@@ -65,7 +65,7 @@ static int numbfs_fill_inode(struct inode *inode)
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 ni->data[i] = le32_to_cpu(di->i_data[i]);
 
-        numbfs_put_buf(&buf);
+        numbfs_ibuf_put(&buf);
 
         err = 0;
         switch(inode->i_mode & S_IFMT) {
@@ -144,15 +144,15 @@ static const char *numbfs_get_link(struct dentry *dentry, struct inode *inode,
         if (!target)
                 return ERR_PTR(-ENOMEM);
 
-        numbfs_init_buf(&buf, inode, 0);
-        err = numbfs_read_buf(&buf);
+        numbfs_ibuf_init(&buf, inode, 0);
+        err = numbfs_ibuf_read(&buf);
         if (err) {
-                numbfs_put_buf(&buf);
+                numbfs_ibuf_put(&buf);
                 return ERR_PTR(err);
         }
 
         memcpy(target, buf.base, NUMBFS_BYTES_PER_BLOCK);
-        numbfs_put_buf(&buf);
+        numbfs_ibuf_put(&buf);
         nd_terminate_link(target, inode->i_size, NUMBFS_BYTES_PER_BLOCK-1);
         set_delayed_call(callback, numbfs_link_free, target);
         return target;

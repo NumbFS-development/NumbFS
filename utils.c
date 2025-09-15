@@ -9,8 +9,7 @@
 #include <linux/writeback.h>
 #include <linux/buffer_head.h>
 
-void numbfs_init_buf(struct numbfs_buf *buf, struct inode *inode,
-                         int blk)
+void numbfs_ibuf_init(struct numbfs_buf *buf, struct inode *inode, int blk)
 {
         buf->inode = inode;
         buf->blkaddr = blk;
@@ -18,7 +17,7 @@ void numbfs_init_buf(struct numbfs_buf *buf, struct inode *inode,
         buf->base = NULL;
 }
 
-int numbfs_read_buf(struct numbfs_buf *buf)
+int numbfs_ibuf_read(struct numbfs_buf *buf)
 {
         struct inode *inode = buf->inode;
         pgoff_t index = (buf->blkaddr << NUMBFS_BLOCK_BITS) >> PAGE_SHIFT;
@@ -35,18 +34,7 @@ int numbfs_read_buf(struct numbfs_buf *buf)
         return 0;
 }
 
-int numbfs_commit_buf(struct numbfs_buf *buf)
-{
-        struct inode *inode = buf->inode;
-        struct folio *folio = buf->folio;
-
-        folio_mark_dirty(folio);
-        block_write_end(NULL, inode->i_mapping, folio_pos(folio),
-                folio_size(folio), folio_size(folio), &folio->page, NULL);
-        return 0;
-}
-
-void numbfs_put_buf(struct numbfs_buf *buf)
+void numbfs_ibuf_put(struct numbfs_buf *buf)
 {
         if (!buf->folio)
                 return;

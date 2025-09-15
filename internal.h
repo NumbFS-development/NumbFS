@@ -67,6 +67,7 @@ struct numbfs_buf {
 struct numbfs_inode_info {
 	int nid;
 	int data[NUMBFS_NUM_DATA_ENTRY];
+	int xattr_start;
 	struct numbfs_superblock_info *sbi;
 	struct inode vfs_inode;
 };

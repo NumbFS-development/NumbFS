@@ -136,7 +136,8 @@ static void numbfs_dir_init_inode(struct inode *inode, struct inode *dir,
                                   int nid, umode_t mode)
 {
         struct numbfs_inode_info *ni = NUMBFS_I(inode);
-        int i;
+        struct timespec64 now = current_time(inode);
+        int i, blk;
 
         inode->i_ino = nid;
         inode->i_mode = mode;
@@ -145,6 +146,10 @@ static void numbfs_dir_init_inode(struct inode *inode, struct inode *dir,
         set_nlink(inode, S_ISDIR(mode) ? 2 : 1);
         inode->i_size = 0;
         inode->i_blocks = 0;
+
+        inode_set_atime(inode, now.tv_sec, now.tv_nsec);
+        inode_set_ctime(inode, now.tv_sec, now.tv_nsec);
+        inode_set_mtime(inode, now.tv_sec, now.tv_nsec);
 
         if (S_ISDIR(mode))
                 numbfs_dir_set_ops(inode);
@@ -155,6 +160,10 @@ static void numbfs_dir_init_inode(struct inode *inode, struct inode *dir,
         ni->nid = nid;
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 ni->data[i] = NUMBFS_HOLE;
+
+        blk = -1;
+        (void)numbfs_balloc(inode->i_sb, &blk);
+        ni->xattr_start = blk;
 }
 
 /* return a locked new inode */

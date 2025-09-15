@@ -96,6 +96,38 @@ static void numbfs_dump_inode(struct inode *inode, struct numbfs_inode *di)
         di->i_size      = cpu_to_le32(inode->i_size);
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 di->i_data[i] = cpu_to_le32(ni->data[i]);
+        di->i_xattr_start = cpu_to_le32(ni->xattr_start);
+}
+
+static int numbfs_dump_timestamps(struct inode *inode)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+        struct numbfs_timestamps *nt;
+        struct numbfs_buf buf;
+        int err;
+
+        err = numbfs_binit(&buf, inode->i_sb->s_bdev,
+                           numbfs_data_blk(ni->sbi, ni->xattr_start));
+        if (err)
+                return err;
+
+        /*
+         * We have to read first because NumbFS's block size is 512B, which is
+         * smaller than the page size (4K), so we must ensure that the subsequent
+         * blocks in the page match those on the disk.
+         */
+        err = numbfs_brw(&buf, NUMBFS_READ);
+        if (err)
+                return err;
+
+        nt = (struct numbfs_timestamps*)buf.base;
+        nt->t_atime = cpu_to_le64((long)inode_get_atime_sec(inode));
+        nt->t_mtime = cpu_to_le64((long)inode_get_mtime_sec(inode));
+        nt->t_ctime = cpu_to_le64((long)inode_get_ctime_sec(inode));
+
+        err = numbfs_brw(&buf, NUMBFS_WRITE);
+        numbfs_bput(&buf);
+        return err;
 }
 
 static int numbfs_write_inode_meta(struct inode *inode)
@@ -107,15 +139,17 @@ static int numbfs_write_inode_meta(struct inode *inode)
 
         di = numbfs_idisk(&buf, inode->i_sb, nid);
         if (IS_ERR(di)) {
-                err = PTR_ERR(di);
-                goto out;
+                numbfs_bput(&buf);
+                return PTR_ERR(di);
         }
 
         numbfs_dump_inode(inode, di);
         err = numbfs_brw(&buf, NUMBFS_WRITE);
-out:
         numbfs_bput(&buf);
-        return err;
+        if (err)
+                return err;
+
+        return numbfs_dump_timestamps(inode);
 }
 
 static int numbfs_write_inode(struct inode *inode, struct writeback_control *wbc)

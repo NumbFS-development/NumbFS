@@ -91,6 +91,13 @@ struct numbfs_dirent {
 	__le16 ino;
 };
 
+struct numbfs_timestamps {
+	__le64 t_atime;
+	__le64 t_mtime;
+	__le64 t_ctime;
+	__u8 reserved[8];
+};
+
 /* on-disk xattr entry */
 struct numbfs_xattr_entry {
 	__u8 e_valid;
@@ -105,6 +112,7 @@ static inline void numbfs_check_ondisk(void)
         BUILD_BUG_ON(sizeof(struct numbfs_super_block) != 128);
         BUILD_BUG_ON(sizeof(struct numbfs_inode) != 64);
         BUILD_BUG_ON(sizeof(struct numbfs_dirent) != 64);
+        BUILD_BUG_ON(sizeof(struct numbfs_timestamps) != 32);
 }
 
 #endif

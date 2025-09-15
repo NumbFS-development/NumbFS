@@ -38,6 +38,33 @@ void numbfs_setsize(struct inode *inode, loff_t newsize)
 	filemap_invalidate_unlock(inode->i_mapping);
 }
 
+static int numbfs_set_timestamps(struct inode *inode)
+{
+        struct numbfs_inode_info *ni = NUMBFS_I(inode);
+        struct numbfs_timestamps *nt;
+        struct numbfs_buf buf;
+        int err;
+
+        err = numbfs_binit(&buf, inode->i_sb->s_bdev,
+                           numbfs_data_blk(ni->sbi, ni->xattr_start));
+        if (err)
+                return err;
+
+        err = numbfs_brw(&buf, NUMBFS_READ);
+        if (err) {
+                numbfs_bput(&buf);
+                return err;
+        }
+
+        nt = (struct numbfs_timestamps*)buf.base;
+        (void)inode_set_atime(inode, (time64_t)le64_to_cpu(nt->t_atime), 0);
+        (void)inode_set_mtime(inode, (time64_t)le64_to_cpu(nt->t_mtime), 0);
+        (void)inode_set_ctime(inode, (time64_t)le64_to_cpu(nt->t_ctime), 0);
+
+        numbfs_bput(&buf);
+        return 0;
+}
+
 static int numbfs_fill_inode(struct inode *inode)
 {
         struct super_block *sb = inode->i_sb;
@@ -64,8 +91,12 @@ static int numbfs_fill_inode(struct inode *inode)
         ni->nid = inode->i_ino;
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 ni->data[i] = le32_to_cpu(di->i_data[i]);
-
+        ni->xattr_start = le32_to_cpu(di->i_xattr_start);
         numbfs_ibuf_put(&buf);
+
+        err = numbfs_set_timestamps(inode);
+        if (err)
+                return err;
 
         err = 0;
         switch(inode->i_mode & S_IFMT) {
@@ -125,7 +156,39 @@ struct inode *numbfs_iget(struct super_block *sb, int nid)
         return inode;
 }
 
+static int numbfs_getattr(struct mnt_idmap *idmap, const struct path *path,
+		          struct kstat *stat, u32 request_mask,
+		          unsigned int query_flags)
+{
+        struct inode *const inode = d_inode(path->dentry);
+
+        generic_fillattr(idmap, request_mask, inode, stat);
+        return 0;
+}
+
+static int numbfs_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
+                          struct iattr *iattr)
+{
+        struct inode *inode = d_inode(dentry);
+        int err;
+
+        err = setattr_prepare(&nop_mnt_idmap, dentry, iattr);
+        if (err)
+                return err;
+
+        if (iattr->ia_valid & ATTR_SIZE && iattr->ia_size != inode->i_size)
+                numbfs_setsize(inode, iattr->ia_size);
+
+        setattr_copy(&nop_mnt_idmap, inode, iattr);
+        mark_inode_dirty(inode);
+
+        return err;
+}
+
+
 const struct inode_operations numbfs_generic_iops = {
+        .getattr        = numbfs_getattr,
+        .setattr        = numbfs_setattr,
 };
 
 static void numbfs_link_free(void *target)
@@ -159,5 +222,7 @@ static const char *numbfs_get_link(struct dentry *dentry, struct inode *inode,
 }
 
 const struct inode_operations numbfs_symlink_iops = {
-        .get_link       = numbfs_get_link
+        .get_link       = numbfs_get_link,
+        .getattr        = numbfs_getattr,
+        .setattr        = numbfs_setattr,
 };

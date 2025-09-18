@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y linux-headers-$(uname -r) build-essential git meson ninja-build
+          sudo apt-get install -y linux-headers-$(uname -r) build-essential git meson ninja-build attr
 
       - name: Build numbfs-utils
         run: |
@@ -108,6 +108,12 @@ jobs:
           if [ -f "tests/read_write.sh" ]; then
             echo "Running read/write tests..."
             ./tests/read_write.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
+          fi
+
+          # xattr
+          if [ -f "tests/xattr.sh" ]; then
+            echo "Running xattr tests..."
+            ./tests/xattr.sh $MOUNT_POINT $NUMBFS_ROOT $IMAGE_NAME
           fi
 
       - name: Cleanup

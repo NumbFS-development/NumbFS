@@ -92,6 +92,7 @@ static int numbfs_fill_inode(struct inode *inode)
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 ni->data[i] = le32_to_cpu(di->i_data[i]);
         ni->xattr_start = le32_to_cpu(di->i_xattr_start);
+        ni->xattr_count = di->i_xattr_count;
         numbfs_ibuf_put(&buf);
 
         err = numbfs_set_timestamps(inode);

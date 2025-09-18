@@ -13,7 +13,7 @@ echo "Testing link and symlink functionality"
 
 sudo umount $MOUNT_POINT
 
-sudo mkfs.numbfs $NUMBFS_ROOT/$IMAGE_NAME
+mkfs.numbfs $NUMBFS_ROOT/$IMAGE_NAME
 sudo mount -t numbfs -o loop $NUMBFS_ROOT/$IMAGE_NAME $MOUNT_POINT
 
 echo "Creating test files tst1 to tst10"

@@ -28,6 +28,7 @@
 #include <linux/fs.h>
 #include <linux/blk_types.h>
 #include <linux/byteorder/generic.h>
+#include <uapi/asm-generic/errno-base.h>
 #include <linux/spinlock.h>
 #include <linux/statfs.h>
 #include <linux/mutex.h>
@@ -68,6 +69,7 @@ struct numbfs_inode_info {
 	int nid;
 	int data[NUMBFS_NUM_DATA_ENTRY];
 	int xattr_start;
+	short xattr_count;
 	struct numbfs_superblock_info *sbi;
 	struct inode vfs_inode;
 };
@@ -161,5 +163,8 @@ int numbfs_ifree(struct super_block *sb, int nid);
 
 /* dir.c */
 void numbfs_dir_set_ops(struct inode *inode);
+
+/* xattr.c */
+extern const struct xattr_handler * const numbfs_xattr_handlers[];
 
 #endif

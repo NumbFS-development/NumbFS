@@ -97,6 +97,7 @@ static void numbfs_dump_inode(struct inode *inode, struct numbfs_inode *di)
         for (i = 0; i < NUMBFS_NUM_DATA_ENTRY; i++)
                 di->i_data[i] = cpu_to_le32(ni->data[i]);
         di->i_xattr_start = cpu_to_le32(ni->xattr_start);
+        di->i_xattr_count = ni->xattr_count;
 }
 
 static int numbfs_dump_timestamps(struct inode *inode)
@@ -242,8 +243,7 @@ static int numbfs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
         sb->s_maxbytes = NUMBFS_BYTES_PER_BLOCK * NUMBFS_NUM_DATA_ENTRY;
         sb->s_op = &numbfs_sops;
         sb->s_time_gran = 1;
-        // TODO: xxx
-        sb->s_xattr = NULL;
+        sb->s_xattr = numbfs_xattr_handlers;
         // TODO: xxx
         sb->s_export_op = NULL;
         if (!sb_set_blocksize(sb, NUMBFS_BYTES_PER_BLOCK)) {

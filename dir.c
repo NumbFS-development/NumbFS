@@ -136,7 +136,9 @@ static void numbfs_dir_init_inode(struct inode *inode, struct inode *dir,
                                   int nid, umode_t mode)
 {
         struct numbfs_inode_info *ni = NUMBFS_I(inode);
+        struct numbfs_superblock_info *sbi = NUMBFS_SB(inode->i_sb);
         struct timespec64 now = current_time(inode);
+        struct numbfs_buf buf;
         int i, blk;
 
         inode->i_ino = nid;
@@ -163,6 +165,13 @@ static void numbfs_dir_init_inode(struct inode *inode, struct inode *dir,
 
         blk = -1;
         (void)numbfs_balloc(inode->i_sb, &blk);
+
+        /* zero out this block */
+        (void)numbfs_binit(&buf, inode->i_sb->s_bdev, numbfs_data_blk(sbi, blk));
+        (void)numbfs_brw(&buf, NUMBFS_READ);
+        memset(buf.base, 0, NUMBFS_BYTES_PER_BLOCK);
+        (void)numbfs_brw(&buf, NUMBFS_WRITE);
+
         ni->xattr_start = blk;
 }
 

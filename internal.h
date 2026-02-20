@@ -106,31 +106,31 @@ void numbfs_file_set_ops(struct inode *inode);
 /* calculate the block number of the bitmap related to @blkno */
 static inline int numbfs_bmap_blk(int startblk, int blkno)
 {
-        return startblk + blkno / NUMBFS_BLOCKS_PER_BLOCK;
+	return startblk + blkno / NUMBFS_BLOCKS_PER_BLOCK;
 }
 
 /* calculate the byte number in the block related to @blkno */
 static inline int numbfs_bmap_byte(int blkno)
 {
-        return  (blkno % NUMBFS_BLOCKS_PER_BLOCK) / NUMBFS_BITS_PER_BYTE;
+	return  (blkno % NUMBFS_BLOCKS_PER_BLOCK) / NUMBFS_BITS_PER_BYTE;
 }
 
 /* calculate the bit number in the byte related to @blkno */
 static inline int numbfs_bmap_bit(int blkno)
 {
-        return (blkno % NUMBFS_BLOCKS_PER_BLOCK) % NUMBFS_BITS_PER_BYTE;
+	return (blkno % NUMBFS_BLOCKS_PER_BLOCK) % NUMBFS_BITS_PER_BYTE;
 }
 
 static inline int numbfs_inode_blk(struct numbfs_superblock_info *sbi,
-                                   int nid)
+				   int nid)
 {
-        return sbi->inode_start + nid / NUMBFS_NODES_PER_BLOCK;
+	return sbi->inode_start + nid / NUMBFS_NODES_PER_BLOCK;
 }
 
 static inline int numbfs_data_blk(struct numbfs_superblock_info *sbi,
-                                  int blk)
+				  int blk)
 {
-        return sbi->data_start + blk;
+	return sbi->data_start + blk;
 }
 
 /* read inode data */

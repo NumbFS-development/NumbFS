@@ -123,10 +123,10 @@ struct numbfs_xattr_entry {
 /* check the on-disk layout at compile time */
 static inline void numbfs_check_ondisk(void)
 {
-        BUILD_BUG_ON(sizeof(struct numbfs_super_block) != 128);
-        BUILD_BUG_ON(sizeof(struct numbfs_inode) != 64);
-        BUILD_BUG_ON(sizeof(struct numbfs_dirent) != 64);
-        BUILD_BUG_ON(sizeof(struct numbfs_timestamps) != 32);
+	BUILD_BUG_ON(sizeof(struct numbfs_super_block) != 128);
+	BUILD_BUG_ON(sizeof(struct numbfs_inode) != 64);
+	BUILD_BUG_ON(sizeof(struct numbfs_dirent) != 64);
+	BUILD_BUG_ON(sizeof(struct numbfs_timestamps) != 32);
 }
 
 #endif

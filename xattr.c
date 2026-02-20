@@ -137,9 +137,9 @@ out:
 }
 
 static int numbfs_xattrset(const struct xattr_handler *handler,
-			    struct mnt_idmap *idmap, struct dentry *dentry,
-			    struct inode *inode, const char *name, const void *buffer,
-			    size_t size, int flags)
+			   struct mnt_idmap *idmap, struct dentry *dentry,
+			   struct inode *inode, const char *name, const void *buffer,
+			   size_t size, int flags)
 {
 	char buf[NUMBFS_BYTES_PER_BLOCK];
 	bool exist = true;
